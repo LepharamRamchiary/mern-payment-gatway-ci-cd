@@ -134,4 +134,35 @@ const login = asyncHandler(async (req, res) => {
   }
 });
 
-export { registerUser, login };
+const logout = asyncHandler(async (req, res) => {
+  try {
+    if (!req.user) {
+      throw new ApiError(200, "User not found or Unauthorized");
+    }
+
+    await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        $set: {
+          refreshToken: null,
+        },
+      },
+      { new: true }
+    );
+
+    const options = {
+      httpOnly: true,
+      secure: true,
+    };
+
+    res
+      .status(200)
+      .clearCookie("accessToken", "", options)
+      .clearCookie("refreshToken", "", options)
+      .json(new ApiResponse(200, {}, "User logged out successfully"));
+  } catch (error) {
+    throw new ApiError(500, error.message);
+  }
+});
+
+export { registerUser, login, logout };
