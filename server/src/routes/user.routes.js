@@ -5,7 +5,9 @@ import {
   login,
   logout,
   getCurrentUser,
-  getAllUsers
+  getAllUsers,
+  updateUserAccount,
+  updateUserAvatar,
 } from "../controllers/user.controllers.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -20,5 +22,13 @@ router.route("/login").post(login);
 router.route("/logout").post(verifyJWT, logout);
 router.route("/get-current-user").get(verifyJWT, getCurrentUser);
 router.route("/get-all-users").get(verifyJWT, getAllUsers);
+router.route("/update-account/:id").put(verifyJWT, updateUserAccount);
+router
+  .route("/avatar/:id")
+  .put(
+    verifyJWT,
+    upload.fields([{ name: "avatar", maxCount: 1 }]),
+    updateUserAvatar
+  );
 
 export default router;

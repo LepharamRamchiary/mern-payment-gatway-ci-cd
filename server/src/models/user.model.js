@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import { type } from "os";
 dotenv.config();
 
 const userSchema = new mongoose.Schema(
@@ -38,6 +39,10 @@ const userSchema = new mongoose.Schema(
     refreshToken: {
       type: String,
     },
+    tokenVersion: {
+      type: Number,
+      default: 0
+    },
     isAdmin: {
       type: Boolean,
       default: false,
@@ -65,6 +70,7 @@ userSchema.methods.generateAccessToken = function () {
       email: this.email,
       username: this.username,
       name: this.name,
+      tokenVersion: this.tokenVersion
     },
     process.env.ACCESS_TOKEN_SECRET,
     {
@@ -78,6 +84,7 @@ userSchema.methods.generateRefershToken = function () {
   return jwt.sign(
     {
       _id: this._id,
+      tokenVersion: this.tokenVersion
     },
     process.env.REFRESH_TOKEN_SECRET,
     {
