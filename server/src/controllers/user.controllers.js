@@ -173,6 +173,34 @@ const getCurrentUser = asyncHandler(async (req, res) => {
     );
 });
 
+const getAllUsers = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 10 } = req.query;
+  const user = req.user;
 
+  if (!user?.isAdmin) {
+    throw new ApiError(403, "Only admin can access this route");
+  }
 
-export { registerUser, login, logout, getCurrentUser};
+  try {
+    const users = await User.find()
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .exec();
+    const count = await User.countDocuments();
+
+    const usersData = {
+      total: count,
+      pages: Math.ceil(count / limit),
+      currentPage: parseInt(page, 10),
+      users,
+    };
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, usersData, "Fetch all users sucessfully"));
+  } catch (error) {
+    throw new ApiError(500, error.message);
+  }
+});
+
+export { registerUser, login, logout, getCurrentUser, getAllUsers };
