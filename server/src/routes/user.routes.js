@@ -5,6 +5,7 @@ import {
   login,
   logout,
   getCurrentUser,
+  getAllUsers
 } from "../controllers/user.controllers.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -18,5 +19,6 @@ router.route("/login").post(login);
 // Protected routes
 router.route("/logout").post(verifyJWT, logout);
 router.route("/get-current-user").get(verifyJWT, getCurrentUser);
+router.route("/get-all-users").get(verifyJWT, getAllUsers);
 
 export default router;
