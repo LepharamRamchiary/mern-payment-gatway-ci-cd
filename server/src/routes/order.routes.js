@@ -4,7 +4,8 @@ import {
   verifyPayment,
   getUserOrders,
   getSingleOrder,
-  getAllOrders
+  getAllOrders,
+  updateOrderStatus
 } from "../controllers/order.controllers.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -17,7 +18,10 @@ router.route("/create").post(createOrder);
 router.route("/verify").post(verifyPayment);
 router.route("/my-orders").get(getUserOrders);
 router.route("/:id").get(getSingleOrder);
+
+// Admin routes
 router.route("/admin/all-orders").get(getAllOrders);
+router.route("/admin/:id").patch(updateOrderStatus);
 
 
 export default router;
