@@ -263,4 +263,63 @@ const getAllOrders = asyncHandler(async (req, res) => {
   }
 });
 
-export { createOrder, verifyPayment, getUserOrders, getSingleOrder, getAllOrders };
+const updateOrderStatus = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { orderStatus } = req.body;
+  const user = req.user;
+
+  if (!user?.isAdmin) {
+    throw new ApiError(403, "Only admin can access this route");
+  }
+
+  if (!orderStatus) {
+    throw new ApiError(400, "Order status is required");
+  }
+
+  const validStatuses = [
+    "pending",
+    "processing",
+    "shipped",
+    "delivered",
+    "cancelled",
+  ];
+  if (!validStatuses.includes(orderStatus)) {
+    throw new ApiError(400, "Invalid order status");
+  }
+
+  try {
+    const order = await Order.findByIdAndUpdate(
+      id,
+      { $set: { orderStatus } },
+      { new: true }
+    ).populate([
+      {
+        path: "products.product",
+        select: "title price image",
+      },
+      {
+        path: "user",
+        select: "name email username",
+      },
+    ]);
+
+    if (!order) {
+      throw new ApiError(404, "Order not found");
+    }
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, order, "Order status updated successfully"));
+  } catch (error) {
+    throw new ApiError(500, error.message);
+  }
+});
+
+export {
+  createOrder,
+  verifyPayment,
+  getUserOrders,
+  getSingleOrder,
+  getAllOrders,
+  updateOrderStatus,
+};
