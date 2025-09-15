@@ -61,6 +61,11 @@ const createOrder = asyncHandler(async (req, res) => {
       shippingAddress,
     });
 
+    const generatedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpayOrder.id}|${totalAmount}`)
+      .digest("hex");
+
     return res.status(201).json(
       new ApiResponse(
         201,
@@ -69,7 +74,7 @@ const createOrder = asyncHandler(async (req, res) => {
           razorpayOrderId: razorpayOrder.id,
           amount: totalAmount,
           currency: "INR",
-          key: process.env.RAZORPAY_KEY_ID,
+          razorpaySignature: generatedSignature,
         },
         "Order created successfully"
       )
@@ -79,4 +84,78 @@ const createOrder = asyncHandler(async (req, res) => {
   }
 });
 
-export { createOrder };
+const verifyPayment = asyncHandler(async (req, res) => {
+  const { orderId, razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
+
+  if (!orderId || !razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+    throw new ApiError(400, "All payment details are required");
+  }
+
+  try {
+
+    // frontend intregation
+
+    // Generate signature for verification
+    // const body = razorpayOrderId + "|" + razorpayPaymentId;
+    // const expectedSignature = crypto
+    //   .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+    //   .update(body.toString())
+    //   .digest("hex");
+
+    // // Verify signature
+    // if (expectedSignature !== razorpaySignature) {
+    //   throw new ApiError(400, "Invalid payment signature");
+    // }
+
+
+
+
+
+    // Update order with payment details
+    const order = await Order.findByIdAndUpdate(
+      orderId,
+      {
+        $set: {
+          razorpayPaymentId,
+          razorpaySignature,
+          paymentStatus: "completed",
+          orderStatus: "processing",
+        },
+      },
+      { new: true }
+    ).populate([
+      {
+        path: "user",
+        select: "name email username",
+      },
+      {
+        path: "products.product",
+        select: "title price image",
+      },
+    ]);
+
+    if (!order) {
+      throw new ApiError(404, "Order not found");
+    }
+
+    // Update product stock
+    for (const item of order.products) {
+      await Product.findByIdAndUpdate(item.product._id, {
+        $inc: { stock: -item.quantity },
+      });
+    }
+
+    return res.status(200).json(
+      new ApiResponse(200, order, "Payment verified successfully")
+    );
+  } catch (error) {
+    // Update order status to failed
+    await Order.findByIdAndUpdate(orderId, {
+      $set: { paymentStatus: "failed" },
+    });
+    
+    throw new ApiError(500, error.message);
+  }
+});
+
+export { createOrder , verifyPayment};
