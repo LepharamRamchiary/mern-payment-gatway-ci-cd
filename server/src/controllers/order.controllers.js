@@ -6,7 +6,6 @@ import { Product } from "../models/product.model.js";
 import razorpayInstance from "../utils/razorpay.js";
 import crypto from "crypto";
 
-
 const createOrder = asyncHandler(async (req, res) => {
   const { products, shippingAddress } = req.body;
   const userId = req.user._id;
@@ -25,7 +24,7 @@ const createOrder = asyncHandler(async (req, res) => {
 
     for (const item of products) {
       const product = await Product.findById(item.productId);
-      
+
       if (!product) {
         throw new ApiError(404, `Product with ID ${item.productId} not found`);
       }
@@ -45,7 +44,7 @@ const createOrder = asyncHandler(async (req, res) => {
     }
 
     const razorpayOrder = await razorpayInstance.orders.create({
-      amount: totalAmount * 100, 
+      amount: totalAmount * 100,
       currency: "INR",
       receipt: `order_${Date.now()}`,
       notes: {
@@ -85,14 +84,19 @@ const createOrder = asyncHandler(async (req, res) => {
 });
 
 const verifyPayment = asyncHandler(async (req, res) => {
-  const { orderId, razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
+  const { orderId, razorpayPaymentId, razorpayOrderId, razorpaySignature } =
+    req.body;
 
-  if (!orderId || !razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+  if (
+    !orderId ||
+    !razorpayPaymentId ||
+    !razorpayOrderId ||
+    !razorpaySignature
+  ) {
     throw new ApiError(400, "All payment details are required");
   }
 
   try {
-
     // frontend intregation
 
     // Generate signature for verification
@@ -106,10 +110,6 @@ const verifyPayment = asyncHandler(async (req, res) => {
     // if (expectedSignature !== razorpaySignature) {
     //   throw new ApiError(400, "Invalid payment signature");
     // }
-
-
-
-
 
     // Update order with payment details
     const order = await Order.findByIdAndUpdate(
@@ -145,47 +145,80 @@ const verifyPayment = asyncHandler(async (req, res) => {
       });
     }
 
-    return res.status(200).json(
-      new ApiResponse(200, order, "Payment verified successfully")
-    );
+    return res
+      .status(200)
+      .json(new ApiResponse(200, order, "Payment verified successfully"));
   } catch (error) {
     // Update order status to failed
     await Order.findByIdAndUpdate(orderId, {
       $set: { paymentStatus: "failed" },
     });
-    
+
     throw new ApiError(500, error.message);
   }
 });
 
 const getUserOrders = asyncHandler(async (req, res) => {
   const userId = req.user._id;
-  const { page= 1, limit= 10 } = req.query;
-  
+  const { page = 1, limit = 10 } = req.query;
+
   try {
-    const orders = await Order.find({ user: userId}).populate([
-      {
-        path: "products.product",
-        select: "title price image",
-      }
-    ]).sort({ createdAt: -1 }).sort({ updatedAt: -1 }).limit(limit * 1).skip((page - 1) * limit).exec();
+    const orders = await Order.find({ user: userId })
+      .populate([
+        {
+          path: "products.product",
+          select: "title price image",
+        },
+      ])
+      .sort({ createdAt: -1 })
+      .sort({ updatedAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .exec();
 
     const count = await Order.countDocuments({ user: userId });
-    
+
     const ordersData = {
       total: count,
       pages: Math.ceil(count / limit),
       currentPage: parseInt(page, 10),
       orders,
     };
-    
-    return res.status(200).json(
-      new ApiResponse(200, ordersData, "Orders fetched successfully")
-    );
-    
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, ordersData, "Orders fetched successfully"));
   } catch (error) {
     throw new ApiError(500, error.message);
   }
-})
+});
 
-export { createOrder , verifyPayment, getUserOrders};
+const getSingleOrder = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user._id;
+
+  try {
+    const order = await Order.findById({ _id: id, user: userId }).populate([
+      {
+        path: "products.product",
+        select: "title price image desc",
+      },
+      {
+        path: "user",
+        select: "name email username",
+      },
+    ]);
+
+    if (!order) {
+      throw new ApiError(404, "Order not found");
+    }
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, order, "Order fetched successfully"));
+  } catch (error) {
+    throw new ApiError(500, error.message);
+  }
+});
+
+export { createOrder, verifyPayment, getUserOrders, getSingleOrder };
