@@ -221,4 +221,46 @@ const getSingleOrder = asyncHandler(async (req, res) => {
   }
 });
 
-export { createOrder, verifyPayment, getUserOrders, getSingleOrder };
+const getAllOrders = asyncHandler(async (req, res) => {
+  const user = req.user;
+  const { page = 1, limit = 10 } = req.query;
+
+  if (!user?.isAdmin) {
+    throw new ApiError(403, "Only admin can access this route");
+  }
+
+  try {
+    const orders = await Order.find()
+      .populate([
+        {
+          path: "user",
+          select: "name email username",
+        },
+        {
+          path: "products.product",
+          select: "title price image",
+        },
+      ])
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .exec();
+
+    const count = await Order.countDocuments();
+
+    const ordersData = {
+      total: count,
+      pages: Math.ceil(count / limit),
+      currentPage: parseInt(page, 10),
+      orders,
+    };
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, ordersData, "Orders fetched successfully"));
+  } catch (error) {
+    throw new ApiError(500, error.message);
+  }
+});
+
+export { createOrder, verifyPayment, getUserOrders, getSingleOrder, getAllOrders };
