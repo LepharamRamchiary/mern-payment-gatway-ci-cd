@@ -158,4 +158,34 @@ const verifyPayment = asyncHandler(async (req, res) => {
   }
 });
 
-export { createOrder , verifyPayment};
+const getUserOrders = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const { page= 1, limit= 10 } = req.query;
+  
+  try {
+    const orders = await Order.find({ user: userId}).populate([
+      {
+        path: "products.product",
+        select: "title price image",
+      }
+    ]).sort({ createdAt: -1 }).sort({ updatedAt: -1 }).limit(limit * 1).skip((page - 1) * limit).exec();
+
+    const count = await Order.countDocuments({ user: userId });
+    
+    const ordersData = {
+      total: count,
+      pages: Math.ceil(count / limit),
+      currentPage: parseInt(page, 10),
+      orders,
+    };
+    
+    return res.status(200).json(
+      new ApiResponse(200, ordersData, "Orders fetched successfully")
+    );
+    
+  } catch (error) {
+    throw new ApiError(500, error.message);
+  }
+})
+
+export { createOrder , verifyPayment, getUserOrders};
