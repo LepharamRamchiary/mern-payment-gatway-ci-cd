@@ -25,92 +25,144 @@ jobs:
         EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
         EC2_PRIVATE_KEY: ${{ secrets.EC2_PRIVATE_KEY }}
         PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
-        MONGODB_URI: ${{ secrets.MONGODB_URI }}
+        MONGODB_URL: ${{ secrets.MONGODB_URL }}
         JWT_SECRET: ${{ secrets.JWT_SECRET }}
         NODE_ENV: staging
       run: |
         mkdir -p ~/.ssh
-        echo "$EC2_PRIVATE_KEY" > ec2_key.pem
-        chmod 600 ec2_key.pem
+        echo "$EC2_PRIVATE_KEY" > staging-server.pem
+        chmod 600 staging-server.pem
         ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
 
-        ssh -i ec2_key.pem $EC2_USERNAME@$EC2_HOST << 'EOF'
+        ssh -i staging-server.pem $EC2_USERNAME@$EC2_HOST << 'EOF'
           set -e
           mkdir -p ~/.ssh
           if ! grep -q "github.com" ~/.ssh/known_hosts 2>/dev/null; then
             ssh-keyscan github.com >> ~/.ssh/known_hosts
           fi
 
+          # Create project directory if it doesn't exist
+          mkdir -p $PROJECT_PATH
           cd $PROJECT_PATH
-          git remote set-url origin git@github.com:your-username/your-repo-name.git
-          git fetch origin
+
+          # Handle Git repository setup
+          if [ ! -d ".git" ]; then
+            echo "No Git repository found. Cloning fresh..."
+            # Remove any existing files first
+            rm -rf * .[^.]* 2>/dev/null || true
+            git clone https://github.com/LepharamRamchiary/mern-payment-gatway-ci-cd.git .
+          else
+            echo "🔄 Git repository exists. Updating..."
+            # Reset any local changes and update
+            git reset --hard HEAD
+            git clean -fd
+            git fetch origin
+            git checkout staging
+            git reset --hard origin/staging
+          fi
+
+          # Ensure we're on the staging branch
           git checkout staging
           git pull origin staging
 
+          echo "📦 Installing dependencies..."
           npm ci --only=production
 
+          echo "🔧 Creating environment file..."
           cat > .env << ENVEOF
-        NODE_ENV=staging
-        PORT=8000
-        MONGODB_URI=$MONGODB_URI
-        JWT_SECRET=$JWT_SECRET
-        ENVEOF
+          NODE_ENV=staging
+          PORT=8000
+          MONGODB_URL=$MONGODB_URL
+          JWT_SECRET=$JWT_SECRET
+          ENVEOF
 
+          # Build if build script exists
           if [ -f "package.json" ] && grep -q "\"build\":" package.json; then
+            echo "🏗️ Building application..."
             npm run build
           fi
 
+          echo "🔄 Managing PM2 processes..."
+          # Stop and delete existing PM2 processes
           pm2 stop all || true
           pm2 delete all || true
 
+          # Start the application
           if [ -f "ecosystem.config.js" ]; then
+            echo "📋 Starting with ecosystem.config.js..."
             pm2 start ecosystem.config.js --env staging
           else
+            echo "🚀 Starting with default PM2 config..."
             pm2 start app.js --name "nodejs-app" --env staging
           fi
 
+          # Save PM2 configuration and setup startup
           pm2 save
-          sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
+          sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu || true
 
+          echo "🔍 Testing MongoDB connection..."
           node -e "
             const mongoose = require('mongoose');
-            mongoose.connect('$MONGODB_URI')
-              .then(() => { console.log('✅ MongoDB OK'); process.exit(0); })
-              .catch(err => { console.error('❌ MongoDB fail:', err.message); process.exit(1); });
+            mongoose.connect('$MONGODB_URL')
+              .then(() => { console.log('✅ MongoDB connection successful'); process.exit(0); })
+              .catch(err => { console.error('❌ MongoDB connection failed:', err.message); process.exit(1); });
           " || echo "⚠️ MongoDB connection test failed"
 
+          echo "🌐 Checking Nginx configuration..."
           sudo nginx -t
           sudo systemctl reload nginx
 
-          echo '=== PM2 Status ==='
+          echo "📊 System Status:"
+          echo "=================="
+          echo "=== PM2 Status ==="
           pm2 status
-          echo '=== Nginx Status ==='
+          echo "=== Nginx Status ==="
           sudo systemctl status nginx --no-pager --lines=5
-          echo '=== Recent PM2 Logs ==='
-          pm2 logs --lines 10 --nostream
+          echo "=== Recent Application Logs ==="
+          pm2 logs --lines 10 --nostream || true
         EOF
 
-        rm ec2_key.pem
+        rm staging-server.pem
 
     - name: Health check
       run: |
-        sleep 15
+        echo "⏳ Waiting for application to start..."
+        sleep 20
+        
         echo "🔍 Performing health check..."
-        response=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }}/api/v1/healthcheck 2>/dev/null || echo "000")
-        if [ "$response" = "200" ]; then
-          echo "✅ Health check passed (HTTP $response)"
-        elif [ "$response" = "000" ]; then
-          echo "⚠️ Health check not reachable, trying root endpoint..."
-          response=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }}/ 2>/dev/null || echo "000")
+        MAX_RETRIES=5
+        RETRY_COUNT=0
+        
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+          echo "🔄 Health check attempt $((RETRY_COUNT + 1))/$MAX_RETRIES"
+          
+          # Try health check endpoint first
+          response=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 http://${{ secrets.EC2_HOST }}/api/v1/healthcheck 2>/dev/null || echo "000")
+          
           if [ "$response" = "200" ]; then
-            echo "✅ Root endpoint OK (HTTP $response)"
-          else
-            echo "❌ App not responding (HTTP $response)"
-            exit 1
+            echo "✅ Health check passed (HTTP $response)"
+            break
+          elif [ "$response" = "000" ]; then
+            echo "⚠️ Health check endpoint not reachable, trying root endpoint..."
+            response=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 http://${{ secrets.EC2_HOST }}/ 2>/dev/null || echo "000")
+            if [ "$response" = "200" ]; then
+              echo "✅ Root endpoint responding (HTTP $response)"
+              break
+            fi
           fi
-        else
-          echo "❌ Health check failed (HTTP $response)"
-          curl -v http://${{ secrets.EC2_HOST }}/api/v1/healthcheck || true
+          
+          RETRY_COUNT=$((RETRY_COUNT + 1))
+          if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "⏳ Retrying in 10 seconds..."
+            sleep 10
+          fi
+        done
+        
+        if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+          echo "❌ Health check failed after $MAX_RETRIES attempts"
+          echo "📋 Final response code: $response"
+          echo "🔍 Attempting verbose connection test..."
+          curl -v --connect-timeout 10 --max-time 30 http://${{ secrets.EC2_HOST }}/ || true
           exit 1
         fi
 
@@ -119,9 +171,11 @@ jobs:
       run: |
         if [ "${{ job.status }}" == "success" ]; then
           echo "✅ Deployment successful to staging!"
-          echo "🚀 App running at http://${{ secrets.EC2_HOST }}"
+          echo "🚀 Application is running at: http://${{ secrets.EC2_HOST }}"
+          echo "📊 Health check endpoint: http://${{ secrets.EC2_HOST }}/api/v1/healthcheck"
         else
           echo "❌ Deployment failed!"
+          echo "🔍 Please check the logs above for error details"
           exit 1
         fi
 
@@ -132,16 +186,17 @@ jobs:
     if: always()
     
     steps:
-    - id: clean_build
-      name: Clean up build artifacts
+    - name: Clean up build artifacts
+      id: clean_build
       run: |
         echo "🧹 Cleaning up CI/CD build artifacts..."
         rm -rf node_modules/.cache || true
+        rm -rf ~/.npm/_cacache || true
         echo "✅ Build artifacts cleaned"
 
-    - id: clean_server
-      name: Clean up server resources
-      if: success()
+    - name: Clean up server resources
+      id: clean_server
+      if: needs.deploy.result == 'success'
       env:
         EC2_HOST: ${{ secrets.EC2_HOST }}
         EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
@@ -149,38 +204,60 @@ jobs:
         PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
       run: |
         mkdir -p ~/.ssh
-        echo "$EC2_PRIVATE_KEY" > ec2_key.pem
-        chmod 600 ec2_key.pem
+        echo "$EC2_PRIVATE_KEY" > staging-server.pem
+        chmod 600 staging-server.pem
         ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
 
-        ssh -i ec2_key.pem $EC2_USERNAME@$EC2_HOST << 'EOF'
-          echo "🧹 Cleaning server..."
-          find /home/ubuntu/.pm2/logs -name "*.log" -mtime +7 -delete || true
+        ssh -i staging-server.pem $EC2_USERNAME@$EC2_HOST << 'EOF'
+          echo "🧹 Starting server cleanup..."
+          
+          # Clean old PM2 logs (older than 7 days)
+          find /home/ubuntu/.pm2/logs -name "*.log" -mtime +7 -delete 2>/dev/null || true
+          
+          # Flush PM2 logs
           pm2 flush || true
+          
+          # Clean npm cache
           npm cache clean --force || true
-          cd $PROJECT_PATH
+          
+          # Navigate to project directory
+          cd $PROJECT_PATH || exit 1
+          
+          # Remove backup directories if they exist
           [ -d "node_modules.backup" ] && rm -rf node_modules.backup
-          find /tmp -name "npm-*" -mtime +1 -exec rm -rf {} + || true
-          find . -name "*.log" -mtime +7 -delete || true
+          
+          # Clean temporary npm files
+          find /tmp -name "npm-*" -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+          
+          # Clean old log files in project directory
+          find . -name "*.log" -mtime +7 -delete 2>/dev/null || true
+          
+          # Show disk usage
+          echo "💾 Current disk usage:"
           df -h /
-          echo "✅ Server cleanup done"
+          
+          echo "✅ Server cleanup completed"
         EOF
 
-        rm ec2_key.pem
+        rm staging-server.pem
 
-    - name: Final cleanup report
+    - name: Cleanup summary
       if: always()
       run: |
-        echo "🎯 Cleanup Summary:"
-        echo "==================="
+        echo "🎯 Cleanup Summary Report"
+        echo "========================="
         if [ "${{ steps.clean_build.outcome }}" = "success" ]; then
           echo "✅ Build artifacts cleanup: SUCCESS"
         else
           echo "❌ Build artifacts cleanup: FAILED"
         fi
+        
         if [ "${{ steps.clean_server.outcome }}" = "success" ]; then
           echo "✅ Server resources cleanup: SUCCESS"
+        elif [ "${{ steps.clean_server.outcome }}" = "skipped" ]; then
+          echo "⏭️ Server resources cleanup: SKIPPED (deployment failed)"
         else
-          echo "⚠️ Server resources cleanup: SKIPPED or FAILED"
+          echo "❌ Server resources cleanup: FAILED"
         fi
-        echo "🏁 Cleanup completed"
+        
+        echo "🏁 Pipeline cleanup completed"
