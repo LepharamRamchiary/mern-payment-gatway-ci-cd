@@ -41,8 +41,10 @@ jobs:
             ssh-keyscan github.com >> ~/.ssh/known_hosts
           fi
 
-          cd $PROJECT_PATH
-          git remote set-url origin https://github.com/LepharamRamchiary/mern-payment-gatway-ci-cd
+          cd $PROJECT_PATH || mkdir -p $PROJECT_PATH && cd $PROJECT_PATH
+          if [ ! -d ".git" ]; then
+            git clone https://github.com/LepharamRamchiary/mern-payment-gatway-ci-cd .   
+          fi
           git fetch origin
           git checkout staging
           git pull origin staging
