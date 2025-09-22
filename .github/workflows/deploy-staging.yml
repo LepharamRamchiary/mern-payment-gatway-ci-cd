@@ -30,11 +30,11 @@ jobs:
         NODE_ENV: staging
       run: |
         mkdir -p ~/.ssh
-        echo "$EC2_PRIVATE_KEY" > staging-server.pem
-        chmod 600 staging-server.pem
+        echo "$EC2_PRIVATE_KEY" > eco-test.pem
+        chmod 600 eco-test.pem
         ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
 
-        ssh -i staging-server.pem $EC2_USERNAME@$EC2_HOST << 'EOF'
+        ssh -i eco-test.pem $EC2_USERNAME@$EC2_HOST << 'EOF'
           set -e
           mkdir -p ~/.ssh
           if ! grep -q "github.com" ~/.ssh/known_hosts 2>/dev/null; then
@@ -121,7 +121,7 @@ jobs:
           pm2 logs --lines 10 --nostream || true
         EOF
 
-        rm staging-server.pem
+        rm eco-test.pem
 
     - name: Health check
       run: |
@@ -203,12 +203,12 @@ jobs:
         PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
       run: |
         mkdir -p ~/.ssh
-        echo "$EC2_PRIVATE_KEY" > staging-server.pem
-        chmod 600 staging-server.pem
+        echo "$EC2_PRIVATE_KEY" > eco-test.pem
+        chmod 600 eco-test.pem
         ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
 
-        ssh -i staging-server.pem $EC2_USERNAME@$EC2_HOST << 'EOF'
-          echo "🧹 Starting server cleanup..."
+        ssh -i eco-test.pem $EC2_USERNAME@$EC2_HOST << 'EOF'
+          echo "Starting server cleanup..."
           
           # Clean old PM2 logs (older than 7 days)
           find /home/ubuntu/.pm2/logs -name "*.log" -mtime +7 -delete 2>/dev/null || true
@@ -238,7 +238,7 @@ jobs:
           echo "✅ Server cleanup completed"
         EOF
 
-        rm staging-server.pem
+        rm eco-test.pem
 
     - name: Cleanup summary
       if: always()
