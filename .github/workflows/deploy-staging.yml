@@ -30,11 +30,11 @@ jobs:
         NODE_ENV: staging
       run: |
         mkdir -p ~/.ssh
-        echo "$EC2_PRIVATE_KEY" > ec2_key.pem
-        chmod 600 ec2_key.pem
+        echo "$EC2_PRIVATE_KEY" > staging-server.pem
+        chmod 600 staging-server.pem
         ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
 
-        ssh -i ec2_key.pem $EC2_USERNAME@$EC2_HOST << 'EOF'
+        ssh -i staging-server.pem $EC2_USERNAME@$EC2_HOST << 'EOF'
           set -e
           mkdir -p ~/.ssh
           if ! grep -q "github.com" ~/.ssh/known_hosts 2>/dev/null; then
@@ -122,7 +122,7 @@ jobs:
           pm2 logs --lines 10 --nostream || true
         EOF
 
-        rm ec2_key.pem
+        rm staging-server.pem
 
     - name: Health check
       run: |
@@ -204,11 +204,11 @@ jobs:
         PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
       run: |
         mkdir -p ~/.ssh
-        echo "$EC2_PRIVATE_KEY" > ec2_key.pem
-        chmod 600 ec2_key.pem
+        echo "$EC2_PRIVATE_KEY" > staging-server.pem
+        chmod 600 staging-server.pem
         ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
 
-        ssh -i ec2_key.pem $EC2_USERNAME@$EC2_HOST << 'EOF'
+        ssh -i staging-server.pem $EC2_USERNAME@$EC2_HOST << 'EOF'
           echo "🧹 Starting server cleanup..."
           
           # Clean old PM2 logs (older than 7 days)
@@ -239,7 +239,7 @@ jobs:
           echo "✅ Server cleanup completed"
         EOF
 
-        rm ec2_key.pem
+        rm staging-server.pem
 
     - name: Cleanup summary
       if: always()
