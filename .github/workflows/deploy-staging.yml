@@ -47,7 +47,7 @@ jobs:
 
           # Handle Git repository setup
           if [ ! -d ".git" ]; then
-            echo "🔄 No Git repository found. Cloning fresh..."
+            echo "No Git repository found. Cloning fresh..."
             # Remove any existing files first
             rm -rf * .[^.]* 2>/dev/null || true
             git clone https://github.com/LepharamRamchiary/mern-payment-gatway-ci-cd.git .
