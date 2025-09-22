@@ -42,7 +42,6 @@ jobs:
           fi
 
           # Create project directory if it doesn't exist
-          mkdir -p $PROJECT_PATH
           cd $PROJECT_PATH
 
           # Handle Git repository setup
