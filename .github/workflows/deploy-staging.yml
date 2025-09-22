@@ -188,7 +188,7 @@ jobs:
     - name: Clean up build artifacts
       id: clean_build
       run: |
-        echo "🧹 Cleaning up CI/CD build artifacts..."
+        echo "Cleaning up CI/CD build artifacts..."
         rm -rf node_modules/.cache || true
         rm -rf ~/.npm/_cacache || true
         echo "✅ Build artifacts cleaned"
