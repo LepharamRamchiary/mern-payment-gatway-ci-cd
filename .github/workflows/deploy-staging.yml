@@ -16,11 +16,12 @@ jobs:
 
       - name: Deploy project files to EC2
         uses: easingthemes/ssh-deploy@main
-        env:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
-          PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.EC2_HOST }}
+          REMOTE_USER: ${{ secrets.EC2_USERNAME }}
+          TARGET: ${{ secrets.PROJECT_PATH }}
+          EXCLUDE: "/dist/, /node_modules/"
 
       - name: Setup and start application
         uses: appleboy/ssh-action@master
