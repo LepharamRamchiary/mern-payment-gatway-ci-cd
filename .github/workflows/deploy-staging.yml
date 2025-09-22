@@ -42,7 +42,7 @@ jobs:
           fi
 
           cd $PROJECT_PATH
-          git remote set-url origin git@github.com:your-username/your-repo-name.git
+          git remote set-url origin https://github.com/LepharamRamchiary/mern-payment-gatway-ci-cd
           git fetch origin
           git checkout staging
           git pull origin staging
